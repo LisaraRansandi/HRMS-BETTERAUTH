@@ -69,6 +69,16 @@ export default function LeavesPage() {
     authClient.getSession().then((result: any) => setCurrentUser(result?.data?.user ?? null));
   }, []);
 
+  const [balance, setBalance] = useState<{ earned: number; taken: number; remaining: number } | null>(null);
+
+  useEffect(() => {
+    if (!myEmployeeId) return;
+    fetch("/api/leaves/remaining", { credentials: "include" })
+      .then(r => r.json())
+      .then(d => { if (d.success) setBalance(d.data); })
+      .catch(() => {});
+  }, [myEmployeeId]);
+
   const [leaves, setLeaves] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>("my");
@@ -177,6 +187,26 @@ export default function LeavesPage() {
         </div>
         <button onClick={() => setShowForm(true)} style={btn(true)}>+ Apply for Leave</button>
       </div>
+
+      {/* Leave Balance Card */}
+      {balance && (
+        <div style={{ display: "flex", gap: 12, marginBottom: 24 }}>
+          {[
+            { label: "Days Earned", value: balance.earned, color: "var(--accent)" },
+            { label: "Days Taken",  value: balance.taken,  color: "var(--warning)" },
+            { label: "Remaining",   value: balance.remaining, color: "var(--success)" },
+          ].map(({ label, value, color }) => (
+            <div key={label} style={{
+              flex: 1, padding: "16px 20px", background: "var(--surface)",
+              border: "1px solid var(--border)", borderRadius: "var(--radius)",
+              boxShadow: "var(--shadow-sm)", textAlign: "center",
+            }}>
+              <div style={{ fontSize: 28, fontWeight: 700, color }}>{value}</div>
+              <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 4, fontWeight: 500 }}>{label}</div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Message */}
       {msg && (
