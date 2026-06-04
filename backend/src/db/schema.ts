@@ -1,6 +1,6 @@
 import {
   pgTable, serial, varchar, text, integer,
-  boolean, timestamp, date, pgEnum,
+  boolean, timestamp, date, pgEnum, real,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -102,6 +102,8 @@ export const leaveRequests = pgTable("leave_requests", {
   reviewedBy: text("reviewed_by").references(() => user.id, { onDelete: "set null" }),
   reviewedAt: timestamp("reviewed_at"),
   reviewNote: text("review_note"),
+  // Days consumed by this request (0.5 for half-day, whole number otherwise)
+  leaveDays: real("leave_days").notNull().default(1),
   // Half-day fields
   isHalfDay: boolean("is_half_day").default(false).notNull(),
   halfDaySession: halfDaySessionEnum("half_day_session").default("NONE").notNull(),
