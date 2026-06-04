@@ -1,8 +1,9 @@
 import { Hono } from "hono";
 import { db } from "../db";
 import { leaveRequests, employees, notifications, user } from "../db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sum } from "drizzle-orm";
 import { authMiddleware, requireRole, SessionUser } from "../middleware/auth";
+import { calculateEarnedLeave, computeLeaveDays } from "../utils/leave";
 
 type AppEnv = { Variables: { user: SessionUser } };
 const router = new Hono<AppEnv>();
@@ -100,6 +101,7 @@ router.post("/", async (c) => {
       endDate,
       reason: reason ?? null,
       status: "PENDING",
+      leaveDays: computeLeaveDays(startDate, endDate, isHalfDay ?? false),
       isHalfDay: isHalfDay ?? false,
       halfDaySession: isHalfDay ? (halfDaySession ?? "FIRST_HALF") : "NONE",
       actingOfficerId: actingOfficerId ? parseInt(actingOfficerId) : null,
@@ -109,6 +111,41 @@ router.post("/", async (c) => {
     }).returning();
 
     return c.json({ success: true, data: leave }, 201);
+  } catch (err) {
+    console.error(err);
+    return c.json({ success: false, error: "Server error" }, 500);
+  }
+});
+
+// GET /remaining — leave balance for the logged-in employee
+router.get("/remaining", async (c) => {
+  try {
+    const u = c.get("user") as SessionUser;
+    if (!u.employeeId)
+      return c.json({ success: false, error: "No employee profile linked" }, 400);
+
+    const [emp] = await db
+      .select({ hireDate: employees.hireDate })
+      .from(employees)
+      .where(eq(employees.id, u.employeeId));
+
+    if (!emp?.hireDate)
+      return c.json({ success: false, error: "No hire date set for this employee" }, 400);
+
+    const earned = calculateEarnedLeave(emp.hireDate);
+
+    const [row] = await db
+      .select({ taken: sum(leaveRequests.leaveDays) })
+      .from(leaveRequests)
+      .where(and(
+        eq(leaveRequests.employeeId, u.employeeId),
+        eq(leaveRequests.status, "APPROVED"),
+      ));
+
+    const taken = parseFloat(row?.taken ?? "0");
+    const remaining = Math.max(0, earned - taken);
+
+    return c.json({ success: true, data: { earned, taken, remaining, hireDate: emp.hireDate } });
   } catch (err) {
     console.error(err);
     return c.json({ success: false, error: "Server error" }, 500);
