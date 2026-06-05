@@ -37,7 +37,7 @@ router.post("/", requireRole("HR_ADMIN"), async (c) => {
 
 router.get("/:id", requireRole("HR_ADMIN", "MANAGER"), async (c) => {
   try {
-    const id = parseInt(c.req.param("id"));
+    const id = parseInt(c.req.param("id") ?? "0");
     const [dept] = await db.select().from(departments).where(eq(departments.id, id));
     if (!dept) return c.json({ success: false, error: "Not found" }, 404);
     const members = await db.select({
@@ -50,7 +50,7 @@ router.get("/:id", requireRole("HR_ADMIN", "MANAGER"), async (c) => {
 
 router.patch("/:id", requireRole("HR_ADMIN"), async (c) => {
   try {
-    const id = parseInt(c.req.param("id"));
+    const id = parseInt(c.req.param("id") ?? "0");
     const body = await c.req.json();
     const updates: Record<string, any> = {};
     if ("name" in body) updates.name = body.name.trim();
