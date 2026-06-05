@@ -22,8 +22,8 @@ export const auth = betterAuth({
     requireEmailVerification: false, // set true in production
   },
 
-  // Allow frontend to call the API
-  trustedOrigins: ["http://localhost:3000"],
+  // Allow frontend to call the API — comma-separated list in env for multi-env support
+  trustedOrigins: (process.env.BETTER_AUTH_TRUSTED_ORIGINS ?? "http://localhost:3000").split(","),
 
   // Session configuration
   session: {
