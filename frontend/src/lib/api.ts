@@ -43,6 +43,7 @@ export const api = {
     request(`/api/leaves/${id}/md`, { method: "PUT", body: JSON.stringify({ mdStatus, reviewNote }) }),
   getEmployeesForDropdown: () =>
     request("/api/leaves/employees"),
+  getAttendanceToday: () => request("/api/attendance/today"),
   checkIn: () =>
     request("/api/attendance/check-in", { method: "POST", body: JSON.stringify({}) }),
   checkOut: () =>

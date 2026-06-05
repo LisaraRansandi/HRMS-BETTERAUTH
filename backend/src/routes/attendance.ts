@@ -48,6 +48,19 @@ router.put("/check-out", async (c) => {
   } catch { return c.json({ success: false, error: "Server error" }, 500); }
 });
 
+router.get("/today", async (c) => {
+  try {
+    const u = c.get("user") as SessionUser;
+    if (!u.employeeId) return c.json({ success: true, data: { record: null } });
+
+    const today = new Date().toISOString().slice(0, 10);
+    const [record] = await db.select().from(attendance)
+      .where(and(eq(attendance.employeeId, u.employeeId), eq(attendance.date, today)));
+
+    return c.json({ success: true, data: { record: record ?? null } });
+  } catch { return c.json({ success: false, error: "Server error" }, 500); }
+});
+
 router.get("/report", requireRole("HR_ADMIN", "MANAGER"), async (c) => {
   try {
     const date = c.req.query("date") ?? new Date().toISOString().slice(0, 10);

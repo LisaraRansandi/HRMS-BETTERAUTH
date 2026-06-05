@@ -12,9 +12,8 @@ export default function AttendancePage() {
   const [reportDate, setReportDate] = useState(new Date().toISOString().slice(0, 10));
 
   async function loadToday() {
-    const d = await api.getAttendanceReport(new Date().toISOString().slice(0, 10));
-    const recs = (d.data as any)?.records ?? [];
-    setRecord(recs[0] ?? null);
+    const d = await api.getAttendanceToday();
+    setRecord((d.data as any)?.record ?? null);
     setLoading(false);
   }
 
