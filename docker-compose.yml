@@ -1,0 +1,77 @@
+services:
+
+  # ── PostgreSQL Database ──────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1234
+      POSTGRES_DB: hrms_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Database Migrations ──────────────────────────────────────────────────────
+  # Applies versioned migration files from drizzle/migrations/, then exits.
+  # Backend waits for this service to complete successfully before starting.
+  # Before first deploy: run `npx drizzle-kit generate` locally and commit the
+  # generated files in backend/drizzle/migrations/ to source control.
+  migrate:
+    build:
+      context: ./backend
+      target: builder         # reuse the builder stage which has drizzle-kit
+    environment:
+      DATABASE_URL: postgresql://postgres:1234@postgres:5432/hrms_db
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: npx drizzle-kit migrate
+    restart: "no"
+
+  # ── Backend API (Hono.js) ────────────────────────────────────────────────────
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      DATABASE_URL: postgresql://postgres:1234@postgres:5432/hrms_db
+      BETTER_AUTH_SECRET: hrms-better-auth-secret-key-min-32-chars-here
+      # The URL browsers use to reach this API (used for OAuth callback generation)
+      BETTER_AUTH_URL: http://localhost:3001
+      # Comma-separated list of frontend origins allowed to call auth endpoints
+      BETTER_AUTH_TRUSTED_ORIGINS: http://localhost:3000
+      PORT: 3001
+      NODE_ENV: production
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      # Any HTTP response below 500 means the Hono server is accepting connections
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3001', r => process.exit(r.statusCode < 500 ? 0 : 1)).on('error', () => process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ── Frontend (Next.js) ───────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        BACKEND_URL: http://backend:3001   # container-to-container URL for server-side rewrites
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy   # wait for Hono to actually be ready, not just started
+
+# ── Volumes ──────────────────────────────────────────────────────────────────
+volumes:
+  postgres_data:   # persists database data across restarts
