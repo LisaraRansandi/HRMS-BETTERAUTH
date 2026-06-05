@@ -4,7 +4,7 @@ import { attendance, employees, departments } from "../db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { authMiddleware, requireRole, SessionUser } from "../middleware/auth";
 
-const router = new Hono();
+const router = new Hono<{ Variables: { user: SessionUser } }>();
 router.use("*", authMiddleware);
 
 router.post("/check-in", async (c) => {
