@@ -31,10 +31,12 @@ router.get("/", async (c) => {
 
     if (stage === "acting" && u.employeeId) {
       conditions.push(eq(leaveRequests.actingOfficerId, u.employeeId));
-    } else if (stage === "hod") {
+    } else if (stage === "hod" && u.employeeId) {
       conditions.push(eq(leaveRequests.actingOfficerStatus, "ACCEPTED"));
-    } else if (stage === "md") {
+      conditions.push(eq(leaveRequests.assignedHodId, u.employeeId));
+    } else if (stage === "md" && u.employeeId) {
       conditions.push(eq(leaveRequests.hodStatus, "RECOMMENDED"));
+      conditions.push(eq(leaveRequests.assignedMdId, u.employeeId));
     } else if (stage === "own" && u.employeeId) {
       conditions.push(eq(leaveRequests.employeeId, u.employeeId));
     } else if (u.role === "EMPLOYEE" && u.employeeId) {
@@ -94,6 +96,25 @@ router.post("/", async (c) => {
     if (isHalfDay && startDate !== endDate)
       return c.json({ success: false, error: "Half-day requests must have the same start and end date" }, 400);
 
+    // If no actingOfficerId provided, fall back to the employee's assigned chain
+    let chosenActingId: number | null = actingOfficerId ? parseInt(actingOfficerId) : null;
+    let assignedHodId: number | null = null;
+    let assignedMdId: number | null = null;
+    if (!chosenActingId) {
+      const [emp] = await db.select({
+        actingOfficerId: employees.actingOfficerId,
+        hodId: employees.hodId,
+        mdId: employees.mdId,
+        approvalChainActive: employees.approvalChainActive,
+      }).from(employees).where(eq(employees.id, u.employeeId));
+      if (!emp) return c.json({ success: false, error: "Employee profile not found" }, 400);
+      if (!emp.approvalChainActive)
+        return c.json({ success: false, error: "Your approval chain has not been activated. Contact HR to configure it before submitting leave." }, 400);
+      chosenActingId = emp.actingOfficerId ?? null;
+      assignedHodId = emp.hodId ?? null;
+      assignedMdId = emp.mdId ?? null;
+    }
+
     const [leave] = await db.insert(leaveRequests).values({
       employeeId: u.employeeId,
       leaveType,
@@ -104,10 +125,14 @@ router.post("/", async (c) => {
       leaveDays: computeLeaveDays(startDate, endDate, isHalfDay ?? false),
       isHalfDay: isHalfDay ?? false,
       halfDaySession: isHalfDay ? (halfDaySession ?? "FIRST_HALF") : "NONE",
-      actingOfficerId: actingOfficerId ? parseInt(actingOfficerId) : null,
+      actingOfficerId: chosenActingId,
       actingOfficerStatus: "PENDING",
       hodStatus: "PENDING",
       mdStatus: "PENDING",
+      assignedHodId: assignedHodId,
+      assignedMdId: assignedMdId,
+      currentApproverEmployeeId: chosenActingId,
+      approvalStage: "ACTING",
     }).returning();
 
     return c.json({ success: true, data: leave }, 201);
@@ -169,8 +194,13 @@ router.put("/:id/acting", async (c) => {
     if (existing.actingOfficerStatus !== "PENDING")
       return c.json({ success: false, error: "You have already responded to this request" }, 400);
 
+    const nextStageFields =
+      actingOfficerStatus === "ACCEPTED"
+        ? { approvalStage: "HOD" as const, currentApproverEmployeeId: existing.assignedHodId }
+        : { approvalStage: "REJECTED" as const, status: "REJECTED" as const, currentApproverEmployeeId: null };
+
     const [updated] = await db.update(leaveRequests)
-      .set({ actingOfficerStatus, updatedAt: new Date() })
+      .set({ actingOfficerStatus, ...nextStageFields, updatedAt: new Date() })
       .where(eq(leaveRequests.id, id))
       .returning();
 
@@ -193,13 +223,20 @@ router.put("/:id/hod", requireRole("MANAGER", "HR_ADMIN"), async (c) => {
 
     const [existing] = await db.select().from(leaveRequests).where(eq(leaveRequests.id, id));
     if (!existing) return c.json({ success: false, error: "Not found" }, 404);
+    if (existing.assignedHodId !== u.employeeId)
+      return c.json({ success: false, error: "You are not the designated HOD for this request" }, 403);
     if (existing.actingOfficerId && existing.actingOfficerStatus !== "ACCEPTED")
       return c.json({ success: false, error: "Acting officer must accept coverage before HOD review" }, 400);
     if (existing.hodStatus !== "PENDING")
       return c.json({ success: false, error: "HOD has already reviewed this request" }, 400);
 
+    const nextStageFields =
+      hodStatus === "RECOMMENDED"
+        ? { approvalStage: "MD" as const, currentApproverEmployeeId: existing.assignedMdId }
+        : { approvalStage: "REJECTED" as const, status: "REJECTED" as const, currentApproverEmployeeId: null };
+
     const [updated] = await db.update(leaveRequests)
-      .set({ hodStatus, reviewedBy: u.id, reviewNote: reviewNote ?? null, updatedAt: new Date() })
+      .set({ hodStatus, reviewedBy: u.id, reviewNote: reviewNote ?? null, ...nextStageFields, updatedAt: new Date() })
       .where(eq(leaveRequests.id, id))
       .returning();
 
@@ -222,18 +259,23 @@ router.put("/:id/md", requireRole("HR_ADMIN"), async (c) => {
 
     const [existing] = await db.select().from(leaveRequests).where(eq(leaveRequests.id, id));
     if (!existing) return c.json({ success: false, error: "Not found" }, 404);
+    if (existing.assignedMdId !== u.employeeId)
+      return c.json({ success: false, error: "You are not the designated MD for this request" }, 403);
     if (existing.hodStatus !== "RECOMMENDED")
       return c.json({ success: false, error: "HOD must recommend before MD approval" }, 400);
     if (existing.mdStatus !== "PENDING")
       return c.json({ success: false, error: "MD has already reviewed this request" }, 400);
 
     const finalStatus = mdStatus === "APPROVED" ? "APPROVED" : "REJECTED";
+    const finalStage = mdStatus === "APPROVED" ? "COMPLETED" : "REJECTED";
 
     const [updated] = await db.transaction(async (tx) => {
       const [leave] = await tx.update(leaveRequests)
         .set({
           mdStatus,
           status: finalStatus as any,
+          approvalStage: finalStage as any,
+          currentApproverEmployeeId: null,
           reviewedBy: u.id,
           reviewedAt: new Date(),
           reviewNote: reviewNote ?? null,

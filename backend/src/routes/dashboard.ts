@@ -29,7 +29,7 @@ router.get("/stats", async (c) => {
 
       return c.json({ success: true, data: {
         role: "HR_ADMIN",
-        employees: { total: Object.values(empMap).reduce((a, b) => a + b, 0), active: empMap.ACTIVE ?? 0, inactive: empMap.INACTIVE ?? 0, onLeave: empMap.ON_LEAVE ?? 0 },
+        employees: { total: Object.values(empMap).reduce((a: number, b: number) => a + b, 0), active: empMap.ACTIVE ?? 0, inactive: empMap.INACTIVE ?? 0, onLeave: empMap.ON_LEAVE ?? 0 },
         leaveRequests: { pendingThisMonth: leaveMap.PENDING ?? 0, approvedThisMonth: leaveMap.APPROVED ?? 0, rejectedThisMonth: leaveMap.REJECTED ?? 0 },
         attendance: attendanceToday[0] ?? { checkedIn: 0, checkedOut: 0 },
         departments: deptStats, pendingLeaveRequests: recentLeaves,
@@ -46,7 +46,7 @@ router.get("/stats", async (c) => {
       ]);
 
       const memberMap = Object.fromEntries(teamMembers.map(r => [r.status, r.count]));
-      return c.json({ success: true, data: { role: "MANAGER", department: dept, team: { total: Object.values(memberMap).reduce((a, b) => a + b, 0), active: memberMap.ACTIVE ?? 0, onLeave: memberMap.ON_LEAVE ?? 0 }, attendanceToday: teamAttendance[0]?.count ?? 0 } });
+      return c.json({ success: true, data: { role: "MANAGER", department: dept, team: { total: Object.values(memberMap).reduce((a: number, b: number) => a + b, 0), active: memberMap.ACTIVE ?? 0, onLeave: memberMap.ON_LEAVE ?? 0 }, attendanceToday: teamAttendance[0]?.count ?? 0 } });
     }
 
     // EMPLOYEE

@@ -26,6 +26,12 @@ export const api = {
     request(`/api/employees?${new URLSearchParams(params)}`),
   createEmployee: (data: Record<string, unknown>) =>
     request("/api/employees", { method: "POST", body: JSON.stringify(data) }),
+  getEmployee: (id: number) =>
+    request(`/api/employees/${id}`),
+  updateEmployee: (id: number, data: Record<string, unknown>) =>
+    request(`/api/employees/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  updateEmployeeChain: (id: number, data: Record<string, unknown>) =>
+    request(`/api/employees/${id}/approval-chain`, { method: "PATCH", body: JSON.stringify(data) }),
   deactivateEmployee: (id: number) =>
     request(`/api/employees/${id}`, { method: "DELETE" }),
   getDepartments: () => request("/api/departments"),
@@ -41,6 +47,7 @@ export const api = {
     request(`/api/leaves/${id}/hod`, { method: "PUT", body: JSON.stringify({ hodStatus, reviewNote }) }),
   mdReview: (id: number, mdStatus: string, reviewNote?: string) =>
     request(`/api/leaves/${id}/md`, { method: "PUT", body: JSON.stringify({ mdStatus, reviewNote }) }),
+  getMyEmployeeProfile: () => request("/api/employees/me"),
   getEmployeesForDropdown: () =>
     request("/api/leaves/employees"),
   getAttendanceToday: () => request("/api/attendance/today"),

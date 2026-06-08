@@ -94,6 +94,12 @@ export default function LeavesPage() {
   const [form, setForm] = useState(emptyForm);
   const [actingSearch, setActingSearch] = useState("");
   const [employeeList, setEmployeeList] = useState<any[]>([]);
+  const [myChain, setMyChain] = useState<{
+    approvalChainActive: boolean;
+    actingOfficerId: number | null; actingFirstName: string | null; actingLastName: string | null; actingStatus: string | null;
+    hodId: number | null; hodFirstName: string | null; hodLastName: string | null; hodStatus: string | null;
+    mdId: number | null; mdFirstName: string | null; mdLastName: string | null; mdStatus: string | null;
+  } | null>(null);
 
   // ── Load data ──────────────────────────────────────────────────────────────
   function load() {
@@ -112,6 +118,20 @@ export default function LeavesPage() {
   useEffect(() => {
     api.getEmployeesForDropdown().then(d => setEmployeeList((d.data as any[]) ?? []));
   }, []);
+
+  useEffect(() => {
+    if (!myEmployeeId) return;
+    api.getMyEmployeeProfile()
+      .then(d => { if (d.success) setMyChain(d.data as any); })
+      .catch(() => {});
+  }, [myEmployeeId]);
+
+  // Pre-fill acting officer from chain
+  useEffect(() => {
+    if (myChain?.actingOfficerId && !form.actingOfficerId) {
+      setForm(f => ({ ...f, actingOfficerId: String(myChain.actingOfficerId) }));
+    }
+  }, [myChain]);
 
   // ── Submit new leave ───────────────────────────────────────────────────────
   async function handleSubmit(e: React.FormEvent) {
@@ -274,6 +294,40 @@ export default function LeavesPage() {
                       />
                       {s === "FIRST_HALF" ? "1st Half" : "2nd Half"}
                     </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Approval chain info */}
+            {myChain && (
+              <div style={{ gridColumn: "span 2" }}>
+                {!myChain.approvalChainActive && (
+                  <div style={{ marginBottom: 10, padding: "8px 12px", borderRadius: "var(--radius-sm)", background: "var(--danger-light)", color: "var(--danger)", fontSize: 12, fontWeight: 500 }}>
+                    ⚠ Your approval chain is not active. Contact HR before submitting.
+                  </div>
+                )}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+                  {([
+                    { label: "Acting Officer", id: myChain.actingOfficerId, firstName: myChain.actingFirstName, lastName: myChain.actingLastName, status: myChain.actingStatus },
+                    { label: "HOD",            id: myChain.hodId,           firstName: myChain.hodFirstName,    lastName: myChain.hodLastName,    status: myChain.hodStatus },
+                    { label: "MD / Chairman",  id: myChain.mdId,            firstName: myChain.mdFirstName,     lastName: myChain.mdLastName,     status: myChain.mdStatus },
+                  ] as const).map(({ label, id, firstName, lastName, status }) => (
+                    <div key={label} style={{ padding: "10px 12px", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)" }}>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>{label}</div>
+                      {id ? (
+                        <>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)", marginBottom: 4 }}>{firstName} {lastName}</div>
+                          <span style={{
+                            padding: "2px 7px", borderRadius: 99, fontSize: 10, fontWeight: 600,
+                            background: status === "ACTIVE" ? "var(--success-light)" : "var(--danger-light)",
+                            color: status === "ACTIVE" ? "var(--success)" : "var(--danger)",
+                          }}>{status ?? "UNKNOWN"}</span>
+                        </>
+                      ) : (
+                        <div style={{ fontSize: 12, color: "var(--text-3)" }}>Not assigned</div>
+                      )}
+                    </div>
                   ))}
                 </div>
               </div>

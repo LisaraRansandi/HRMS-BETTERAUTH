@@ -1,6 +1,6 @@
 import {
   pgTable, serial, varchar, text, integer,
-  boolean, timestamp, date, pgEnum, real,
+  boolean, timestamp, date, pgEnum, real, type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -13,6 +13,7 @@ export const halfDaySessionEnum = pgEnum("half_day_session", ["FIRST_HALF", "SEC
 export const actingOfficerStatusEnum = pgEnum("acting_officer_status", ["PENDING", "ACCEPTED", "DECLINED"]);
 export const hodStatusEnum = pgEnum("hod_status", ["PENDING", "RECOMMENDED", "NOT_RECOMMENDED"]);
 export const mdStatusEnum = pgEnum("md_status", ["PENDING", "APPROVED", "NOT_APPROVED"]);
+export const approvalStageEnum = pgEnum("approval_stage", ["ACTING", "HOD", "MD", "COMPLETED", "REJECTED", "CANCELLED"]);
 
 // ── Better Auth Tables ────────────────────────────────────────────────────────
 // These are REQUIRED by Better Auth — do not rename or remove columns
@@ -87,6 +88,12 @@ export const employees = pgTable("employees", {
   departmentId: integer("department_id").references(() => departments.id, { onDelete: "set null" }),
   hireDate: date("hire_date"),
   status: employmentStatusEnum("status").default("ACTIVE").notNull(),
+  // Assigned approval chain for this employee (defaults used when they submit leave)
+  actingOfficerId: integer("acting_officer_id").references((): AnyPgColumn => employees.id, { onDelete: "set null" }),
+  hodId: integer("hod_id").references((): AnyPgColumn => employees.id, { onDelete: "set null" }),
+  mdId: integer("md_id").references((): AnyPgColumn => employees.id, { onDelete: "set null" }),
+  approvalChainActive: boolean("approval_chain_active").default(false).notNull(),
+  approvalChainUpdatedAt: timestamp("approval_chain_updated_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -112,6 +119,12 @@ export const leaveRequests = pgTable("leave_requests", {
   actingOfficerStatus: actingOfficerStatusEnum("acting_officer_status").default("PENDING").notNull(),
   hodStatus: hodStatusEnum("hod_status").default("PENDING").notNull(),
   mdStatus: mdStatusEnum("md_status").default("PENDING").notNull(),
+  // Snapshot of the assigned HOD/MD for audit and routing
+  assignedHodId: integer("assigned_hod_id").references(() => employees.id, { onDelete: "set null" }),
+  assignedMdId: integer("assigned_md_id").references(() => employees.id, { onDelete: "set null" }),
+  // Current workflow routing helpers
+  approvalStage: approvalStageEnum("approval_stage").default("ACTING").notNull(),
+  currentApproverEmployeeId: integer("current_approver_employee_id").references(() => employees.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
